@@ -53,6 +53,7 @@ class GlobalExceptionHandlerTest {
 
         // then
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
         assertEquals(FIELD_IS_REQUIRED, response.getBody().get(FIELD_NAME));
     }
 
@@ -72,6 +73,7 @@ class GlobalExceptionHandlerTest {
 
         // then
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
         assertEquals(MUST_BE_18, response.getBody().get(AGE));
     }
 
@@ -113,5 +115,4 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, response.getStatusCode());
         assertEquals(TOO_MANY_REQUESTS, response.getBody());
     }
-
 }

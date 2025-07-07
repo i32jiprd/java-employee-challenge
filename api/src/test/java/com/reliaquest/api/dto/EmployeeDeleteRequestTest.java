@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
  * Test suite for EmployeeDeleteRequest
  *
  * This is a very simple one, but taken into account the odd implementation
- * I preffer to create it as a placeholder for future changes on the request class.
+ * I prefer to create it as a placeholder for future changes on the request class.
  */
 class EmployeeDeleteRequestTest {
 

@@ -26,21 +26,21 @@ class CustomResponseErrorHandlerTest {
     ClientHttpResponse response;
 
     @Test
-    void hasError_whenACCEPTEDHttpStatusIsFOund_returnFalse() throws IOException {
+    void hasError_whenACCEPTEDHttpStatusIsFound_returnFalse() throws IOException {
         // given
-        when(response.getStatusCode()).thenReturn(HttpStatus.ACCEPTED);
-
         // when
+        when(response.getStatusCode()).thenReturn(HttpStatus.ACCEPTED);
         final CustomResponseErrorHandler handler = new CustomResponseErrorHandler();
+
         // then
         assertFalse(handler.hasError(response));
     }
 
     @Test
-    void hasError_whenTOO_MANY_REQUESTSHttpStatusIsFOund_returnTrue() throws IOException {
+    void hasError_whenTOO_MANY_REQUESTSHttpStatusIsFound_returnTrue() throws IOException {
         // given
-        when(response.getStatusCode()).thenReturn(HttpStatus.TOO_MANY_REQUESTS);
         // when
+        when(response.getStatusCode()).thenReturn(HttpStatus.TOO_MANY_REQUESTS);
         final CustomResponseErrorHandler handler = new CustomResponseErrorHandler();
         // then
         assertTrue(handler.hasError(response));
@@ -49,10 +49,10 @@ class CustomResponseErrorHandlerTest {
     @Test
     void handleError_whenHttpStatusIsTOO_MANY_REQUESTS_thenExceptionIsThrown() throws IOException {
         // given
+        // when
         when(response.getStatusCode()).thenReturn(HttpStatus.TOO_MANY_REQUESTS);
         final CustomResponseErrorHandler handler = new CustomResponseErrorHandler();
 
-        // when
         final TooManyRequestsException exception =
                 assertThrows(TooManyRequestsException.class, () -> handler.handleError(response));
         // then
@@ -62,9 +62,9 @@ class CustomResponseErrorHandlerTest {
     @Test
     void handleError_whenHttpStatusIsNotTOO_MANY_REQUESTS_thenExceptionIsNotThrown() throws IOException {
         // given
+        // when
         when(response.getStatusCode()).thenReturn(HttpStatus.CREATED);
         final CustomResponseErrorHandler handler = new CustomResponseErrorHandler();
-        // when
 
         // then
         assertDoesNotThrow(() -> handler.handleError(response));

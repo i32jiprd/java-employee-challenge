@@ -11,7 +11,8 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Controller Implementation using template. So, it can be replaced using other implementations.
+ * Controller Implementation using the template.
+ * So, it can be replaced using other implementations for Entity and Input.
  */
 @RestController
 public class EmployeeControllerImpl implements IEmployeeController<Employee, EmployeeCreationRequest> {

@@ -84,5 +84,4 @@ public class GlobalExceptionHandler {
     public ResponseEntity<String> handleTooManyRequestsException(TooManyRequestsException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(ex.getMessage());
     }
-
 }
