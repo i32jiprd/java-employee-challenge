@@ -13,6 +13,8 @@ dependencies {
 
     testImplementation 'org.mockito:mockito-core'
 
+    implementation group: 'org.springdoc', name: 'springdoc-openapi-starter-webmvc-ui', version: '2.8.9'
+
 }
 
 springBoot {
