@@ -1,4 +1,5 @@
 spring.application.name: employee-api
 server.port: 8111
 
-app.employeeAPI.url: http://localhost:8112/api/v1/employee
+webclientconfig:
+  baseurl: http://localhost:8112/api/v1/employee

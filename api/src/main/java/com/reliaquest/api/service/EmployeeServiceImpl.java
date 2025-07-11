@@ -2,32 +2,26 @@ package com.reliaquest.api.service;
 
 import com.reliaquest.api.dto.EmployeeCreationRequest;
 import com.reliaquest.api.dto.EmployeeDeleteRequest;
-import com.reliaquest.api.exception.CustomResponseErrorHandler;
 import com.reliaquest.api.exception.TooManyRequestsException;
 import com.reliaquest.api.model.Employee;
 import com.reliaquest.api.model.EmployeeResponse;
 import com.reliaquest.api.model.EmployeesResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
+import reactor.util.retry.RetryBackoffSpec;
 
-// NOTE: we limit to 5 attempts each 90 seconds to be in range.
-// This is the worst case scenario.
-// We could relax these conditions, but we could get the exception.
-// This is applied to all public methods in this class as most of them make use of getAllEmployees() method
-@Retryable(
-        maxAttempts = 5,
-        value = {TooManyRequestsException.class},
-        backoff = @Backoff(delay = 90000))
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
 
@@ -35,20 +29,10 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    private final RestTemplate restTemplate;
+    private final WebClient webClient;
 
-    @Value("${app.employeeAPI.url}") // Property initialized via application.yml to avoid hardcoded values
-    private String employeeAPIURL;
-
-    public EmployeeServiceImpl() {
-        this.restTemplate = new RestTemplate();
-        restTemplate.setErrorHandler(new CustomResponseErrorHandler());
-    }
-
-    // NOTE: Constructor for testing. This is a workaround due to the limited access to resTemplate Instance
-    public EmployeeServiceImpl(RestTemplate restTemplate, String employeeAPIURL) {
-        this.restTemplate = restTemplate;
-        this.employeeAPIURL = employeeAPIURL;
+    public EmployeeServiceImpl(WebClient webClient) {
+        this.webClient = webClient;
     }
 
     /**
@@ -62,7 +46,14 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @return List<Employee list of Employee from the server
      */
     public List<Employee> getAllEmployees() {
-        final EmployeesResponse response = restTemplate.getForObject(employeeAPIURL, EmployeesResponse.class);
+        final EmployeesResponse response = webClient
+                .get()
+                .uri("")
+                .retrieve()
+                .onStatus(this::isTooManyRequests, this::handleTooManyRequests)
+                .bodyToMono(EmployeesResponse.class)
+                .retryWhen(getRetrySpec())
+                .block();
 
         final List<Employee> result;
         String responseStatus = null;
@@ -100,8 +91,15 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @return - Employee matching the id or null otherwise.
      */
     public Employee getEmployeeById(String id) {
-        final EmployeeResponse response =
-                restTemplate.getForObject(employeeAPIURL + "/{id}", EmployeeResponse.class, id);
+        final EmployeeResponse response = webClient
+                .get()
+                .uri("/{id}", id)
+                .retrieve()
+                .onStatus(this::isTooManyRequests, this::handleTooManyRequests)
+                .onStatus(this::isNotFound, clientResponse -> Mono.empty())
+                .bodyToMono(EmployeeResponse.class)
+                .retryWhen(getRetrySpec())
+                .block();
 
         final Employee result;
         String responseStatus = null;
@@ -159,15 +157,15 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @return - new Employee instance
      */
     public Employee createEmployee(EmployeeCreationRequest employeeInput) {
-        final HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        final HttpEntity<EmployeeCreationRequest> request = new HttpEntity<>(employeeInput, headers);
-
-        return restTemplate
-                .postForEntity(employeeAPIURL, request, EmployeeResponse.class)
-                .getBody()
-                .data();
+        return webClient
+                .post()
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .bodyValue(employeeInput)
+                .retrieve()
+                .bodyToMono(EmployeeResponse.class)
+                .map(EmployeeResponse::data)
+                .retryWhen(getRetrySpec())
+                .block();
     }
 
     /**
@@ -203,14 +201,53 @@ public class EmployeeServiceImpl implements EmployeeService {
 
             logger.info("Employee with id {} and name {} was found", id, name);
 
-            final HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            final HttpEntity<EmployeeDeleteRequest> requestEntity =
-                    new HttpEntity<>(new EmployeeDeleteRequest(name), headers);
+            webClient
+                    .method(HttpMethod.DELETE)
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .bodyValue(new EmployeeDeleteRequest(name))
+                    .retrieve()
+                    .toBodilessEntity()
+                    .retryWhen(getRetrySpec())
+                    .block(); // Blocks for completion (synchronous like original)
 
-            // NOTE: we use exchange with DELETE method as delete with a body is not supported by RestTemplate
-            restTemplate.exchange(employeeAPIURL, HttpMethod.DELETE, requestEntity, Void.class);
             return name;
         }
+    }
+
+    /**
+     * Support method used to define the retry strategy when a tooMany retries status response is found.
+     *
+     * <p>we limit to 5 attempts each 90 seconds to be in range.
+     * This is the worst case scenario.</p>
+     *
+     * @return RetryBackoffSpec
+     */
+    private static RetryBackoffSpec getRetrySpec() {
+        int maxRetries = 10;
+        Duration initialBackoff = Duration.ofSeconds(30);
+        Duration maxBackoff = Duration.ofSeconds(90);
+
+        return Retry.backoff(maxRetries, initialBackoff)
+                .maxBackoff(maxBackoff)
+                .jitter(0.5) // Adds 50% random jitter to avoid retry storms
+                .filter(throwable -> throwable instanceof WebClientResponseException.TooManyRequests)
+                .doBeforeRetry(retrySignal -> System.out.printf(
+                        "Retrying (%d/%d)... Reason: %s%n",
+                        retrySignal.totalRetries() + 1, maxRetries, retrySignal.failure().getMessage()))
+                .onRetryExhaustedThrow((spec, signal) ->
+                        new TooManyRequestsException("Retries exhausted after " + maxRetries + " attempts"));
+    }
+
+    private boolean isTooManyRequests(HttpStatusCode httpStatusCode) {
+        return httpStatusCode.value() == 429;
+    }
+
+    private boolean isNotFound(HttpStatusCode httpStatusCode) {
+        return httpStatusCode.value() == 404;
+    }
+
+    private Mono<? extends Throwable> handleTooManyRequests(ClientResponse response) {
+        System.out.println("Received 429 Too Many Requests. Will attempt retry.");
+        return response.createException();
     }
 }

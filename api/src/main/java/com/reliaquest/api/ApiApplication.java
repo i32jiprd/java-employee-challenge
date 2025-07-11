@@ -1,11 +1,12 @@
 package com.reliaquest.api;
 
+import com.reliaquest.api.config.WebClientConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.context.annotation.Import;
 
-@EnableRetry
 @SpringBootApplication
+@Import(WebClientConfig.class)
 public class ApiApplication {
 
     public static void main(String[] args) {

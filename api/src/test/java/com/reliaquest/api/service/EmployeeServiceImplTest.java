@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 import com.reliaquest.api.dto.EmployeeCreationRequest;
+import com.reliaquest.api.dto.EmployeeDeleteRequest;
 import com.reliaquest.api.model.Employee;
 import com.reliaquest.api.model.EmployeeResponse;
 import com.reliaquest.api.model.EmployeesResponse;
@@ -15,7 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import org.springframework.http.*;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 /**
  * This test suite exercises the methods from EmployeeServiceImpl
@@ -48,7 +50,22 @@ class EmployeeServiceImplTest {
             new Employee(USER_ID_2, NAME_2, SALARY_123, 18, "Artist", "david@example.com");
 
     @Mock
-    private RestTemplate restTemplate;
+    private WebClient webClient;
+
+    @Mock
+    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
+
+    @Mock
+    private WebClient.RequestHeadersSpec requestHeadersSpec;
+
+    @Mock
+    private WebClient.RequestBodyUriSpec requestBodyUriSpec;
+
+    @Mock
+    private WebClient.ResponseSpec responseSpec;
+
+    @Mock
+    private Mono<EmployeesResponse> responseMono;
 
     @InjectMocks
     private EmployeeServiceImpl employeeService;
@@ -61,7 +78,7 @@ class EmployeeServiceImplTest {
         mocks = MockitoAnnotations.openMocks(this);
 
         // Inject mock RestTemplate and absolute URL via constructor
-        employeeService = new EmployeeServiceImpl(restTemplate, "http://dummy-api/employees");
+        employeeService = new EmployeeServiceImpl(webClient);
     }
 
     @AfterEach
@@ -76,7 +93,8 @@ class EmployeeServiceImplTest {
         // given
         final List<Employee> list = List.of();
         final EmployeesResponse response = new EmployeesResponse(RESPONSE_STATUS, list);
-        when(restTemplate.getForObject(anyString(), any())).thenReturn(response);
+
+        mockGellAllemployeesServerAPICallextracted(response);
 
         // when
         final List<Employee> result = employeeService.getAllEmployees();
@@ -90,8 +108,7 @@ class EmployeeServiceImplTest {
         final EmployeesResponse mockResponse = new EmployeesResponse(RESPONSE_STATUS, List.of(EMPLOYEE_1, EMPLOYEE_2));
 
         // when
-        when(restTemplate.getForObject(anyString(), eq(EmployeesResponse.class)))
-                .thenReturn(mockResponse);
+        mockGellAllemployeesServerAPICallextracted(mockResponse);
 
         final List<Employee> result = employeeService.getAllEmployees();
 
@@ -104,10 +121,11 @@ class EmployeeServiceImplTest {
     @Test
     void getEmployeesByNameSearch_whenThereAreNoMatchingNames_thenReturnEmptyList() {
         final List<Employee> list = List.of();
+        final EmployeesResponse response = new EmployeesResponse(RESPONSE_STATUS, list);
 
         // when
-        final EmployeesResponse response = new EmployeesResponse(RESPONSE_STATUS, list);
-        when(restTemplate.getForObject(anyString(), any())).thenReturn(response);
+        mockGellAllemployeesServerAPICallextracted(response);
+
         // when
         final List<Employee> result = employeeService.getEmployeesByNameSearch(NAME_1);
         // then
@@ -121,7 +139,7 @@ class EmployeeServiceImplTest {
         final EmployeesResponse response = new EmployeesResponse(RESPONSE_STATUS, list);
 
         // when
-        when(restTemplate.getForObject(anyString(), any())).thenReturn(response);
+        mockGellAllemployeesServerAPICallextracted(response);
 
         final List<Employee> result = employeeService.getEmployeesByNameSearch(NAME_1);
 
@@ -134,7 +152,12 @@ class EmployeeServiceImplTest {
     void getEmployeeById_whenThereIsNoMatchingEmployee_thenReturnNull() {
         // given
         // when
-        when(restTemplate.getForObject(anyString(), any(), anyString())).thenReturn(null);
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(EmployeeResponse.class)).thenReturn(Mono.empty());
+
         final Employee result = employeeService.getEmployeeById(USER_ID_1);
 
         // then
@@ -147,8 +170,12 @@ class EmployeeServiceImplTest {
         final EmployeeResponse response = new EmployeeResponse(RESPONSE_STATUS, EMPLOYEE_1);
 
         // when
-        when(restTemplate.getForObject(anyString(), eq(EmployeeResponse.class), anyString()))
-                .thenReturn(response);
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(EmployeeResponse.class)).thenReturn(Mono.just(response));
+
         final Employee result = employeeService.getEmployeeById(USER_ID_1);
 
         // then
@@ -162,8 +189,7 @@ class EmployeeServiceImplTest {
 
         // when
         final EmployeesResponse mockResponse = new EmployeesResponse(RESPONSE_STATUS, list);
-        when(restTemplate.getForObject(anyString(), eq(EmployeesResponse.class)))
-                .thenReturn(mockResponse);
+        mockGellAllemployeesServerAPICallextracted(mockResponse);
 
         final Optional<Integer> result = employeeService.getHighestSalaryOfEmployees();
 
@@ -178,8 +204,7 @@ class EmployeeServiceImplTest {
 
         // when
         final EmployeesResponse mockResponse = new EmployeesResponse(RESPONSE_STATUS, list);
-        when(restTemplate.getForObject(anyString(), eq(EmployeesResponse.class)))
-                .thenReturn(mockResponse);
+        mockGellAllemployeesServerAPICallextracted(mockResponse);
 
         final Optional<Integer> result = employeeService.getHighestSalaryOfEmployees();
 
@@ -197,8 +222,8 @@ class EmployeeServiceImplTest {
 
         // when
         final EmployeesResponse mockResponse = new EmployeesResponse(RESPONSE_STATUS, highEarnerList);
-        when(restTemplate.getForObject(anyString(), eq(EmployeesResponse.class)))
-                .thenReturn(mockResponse);
+        mockGellAllemployeesServerAPICallextracted(mockResponse);
+
         final List<String> result = employeeService.getTopTenHighestEarningEmployeeNames();
 
         // then
@@ -221,8 +246,7 @@ class EmployeeServiceImplTest {
 
         // when
         final EmployeesResponse mockResponse = new EmployeesResponse(RESPONSE_STATUS, highEarnerList);
-        when(restTemplate.getForObject(anyString(), eq(EmployeesResponse.class)))
-                .thenReturn(mockResponse);
+        mockGellAllemployeesServerAPICallextracted(mockResponse);
 
         final List<String> result = employeeService.getTopTenHighestEarningEmployeeNames();
 
@@ -244,8 +268,12 @@ class EmployeeServiceImplTest {
         final ResponseEntity<EmployeeResponse> responseEntity = new ResponseEntity<>(response, HttpStatus.OK);
 
         // when
-        when(restTemplate.postForEntity(anyString(), any(), eq(EmployeeResponse.class)))
-                .thenReturn(responseEntity);
+        when(webClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+                .thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.bodyValue(any(EmployeeCreationRequest.class))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(EmployeeResponse.class)).thenReturn(Mono.just(response));
 
         final Employee result = employeeService.createEmployee(request);
 
@@ -266,8 +294,19 @@ class EmployeeServiceImplTest {
         final EmployeeResponse response = new EmployeeResponse(RESPONSE_STATUS, newEmployee);
 
         // when
-        when(restTemplate.getForObject(anyString(), eq(EmployeeResponse.class), anyString()))
-                .thenReturn(response);
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(requestHeadersSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(EmployeeResponse.class)).thenReturn(Mono.just(response));
+
+        when(webClient.method(HttpMethod.DELETE)).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+                .thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.bodyValue(any(EmployeeDeleteRequest.class))).thenReturn(requestHeadersSpec);
+        when(requestBodyUriSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.toBodilessEntity())
+                .thenReturn(Mono.just(ResponseEntity.ok().build()));
 
         // then
         final String result = employeeService.deleteEmployeeById(USER_ID_3);
@@ -277,18 +316,29 @@ class EmployeeServiceImplTest {
     @Test
     void deleteEmployeeById_whenNotFound_thenDoNothingAndReturnNull() {
         // given
-        final List<Employee> list = List.of(EMPLOYEE_1, EMPLOYEE_2);
-        final EmployeesResponse mockResponse = new EmployeesResponse(RESPONSE_STATUS, list);
 
         // when
-        when(restTemplate.getForObject(anyString(), eq(EmployeesResponse.class)))
-                .thenReturn(mockResponse);
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(requestHeadersSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(EmployeeResponse.class)).thenReturn(Mono.empty());
 
         // then
         final String deletedName = employeeService.deleteEmployeeById(USER_ID_3);
 
-        verify(restTemplate, never()).exchange(anyString(), eq(HttpMethod.DELETE), any(), eq(Void.class));
+        verify(webClient, never()).method(HttpMethod.DELETE);
 
         assertNull(deletedName);
+    }
+
+    private void mockGellAllemployeesServerAPICallextracted(EmployeesResponse response) {
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri("")).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(EmployeesResponse.class)).thenReturn(responseMono);
+        when(responseMono.retryWhen(any())).thenReturn(responseMono);
+        when(responseMono.block()).thenReturn(response);
     }
 }
